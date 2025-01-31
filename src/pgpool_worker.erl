@@ -274,6 +274,7 @@ prepare_or_get_statement(Statement, #state{
     prepared_statements = PreparedStatements
 } = State) ->
     Name = "histatement_" ++ integer_to_list(erlang:phash2(Statement)),
+    io:format("~nname:~p",[Name]),
     case dict:find(Name, PreparedStatements) of
         {ok, PreparedStatement} ->
             {PreparedStatement, Name, State};

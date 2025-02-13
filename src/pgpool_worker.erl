@@ -285,8 +285,6 @@ prepare_or_get_statement(Statement, #state{
                CreatedName
      end,	
 
-
-    Name = lists:concat([integer_to_list(erlang:unique_integer([positive])), integer_to_list(erlang:phash2(Statement))]),
     case dict:find(Name, PreparedStatements) of
         {ok, PreparedStatement} ->
             {PreparedStatement, Name, State};

@@ -273,6 +273,19 @@ prepare_or_get_statement(Statement, #state{
     conn = Conn,
     prepared_statements = PreparedStatements
 } = State) ->
+    
+    Name = case dict:find( integer_to_list(erlang:phash2(Statement)), PreparedStatements) of
+        {ok, StoreName} ->
+            StoreName;
+        error ->
+               RandomNum1 = 1 + rand:uniform(10000 - 1 + 1) - 1,
+               RandomNum2 = 10000 + rand:uniform(100000 - 10000 + 1) - 1,
+               RandomNum3 = 100000 + rand:uniform(1000000 - 100000 + 1) - 1,
+               CreatedName = lists:concat([integer_to_list(RandomNum1),"-",integer_to_list(RandomNum2),"-",integer_to_list(RandomNum3)]),
+               CreatedName
+     end,	
+
+
     Name = lists:concat([integer_to_list(erlang:unique_integer([positive])), integer_to_list(erlang:phash2(Statement))]),
     case dict:find(Name, PreparedStatements) of
         {ok, PreparedStatement} ->
@@ -281,9 +294,10 @@ prepare_or_get_statement(Statement, #state{
             %% prepare statement
             {ok, PreparedStatement} = epgsql:parse(Conn, Name, Statement, []),
             %% store
-            PreparedStatements1 = dict:store(Name, PreparedStatement, PreparedStatements),
+	    PreparedStatements1 = dict:store(Name, PreparedStatement, PreparedStatements),
+            PreparedStatements2 = dict:store( integer_to_list(erlang:phash2(Statement)), Name, PreparedStatements1),
             %% update state
-            State1 = State#state{prepared_statements = PreparedStatements1},
+            State1 = State#state{prepared_statements = PreparedStatements2},
             %% return
             {PreparedStatement, Name, State1}
     end.

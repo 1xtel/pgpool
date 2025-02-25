@@ -29,7 +29,7 @@
 -export([start/0, stop/0]).
 -export([squery/2, squery/3]).
 -export([equery/3, equery/4]).
--export([batch/2, batch/3]).
+-export([batch/2, batch/3, parse_execute/3]).
 
 %% includes
 -include("pgpool.hrl").
@@ -84,6 +84,12 @@ batch(DatabaseName, StatementsWithParams) ->
 batch(DatabaseName, StatementsWithParams, Options) ->
     pgpool_worker:batch(DatabaseName, StatementsWithParams, Options).
 
+-spec parse_execute(DatabaseName :: atom(), Sql :: string() | iodata(), Params :: list()) ->
+    {ok, Count :: non_neg_integer()}
+    | {ok, Count :: non_neg_integer(), Rows :: any()}
+    | {error, no_connection | no_available_connections}.
+parse_execute(DatabaseName, Sql, Param) ->
+    pgpool_worker:parse_execute(DatabaseName, Sql, Param).
 %% ===================================================================
 %% Internal
 %% ===================================================================

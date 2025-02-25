@@ -31,7 +31,7 @@
 -export([start_link/1]).
 -export([squery/2, squery/3]).
 -export([equery/3, equery/4]).
--export([batch/2, batch/3]).
+-export([batch/2, batch/3, parse_execute/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -82,6 +82,13 @@ squery(DatabaseName, Sql, Options) ->
     | {error, no_connection | no_available_connections}.
 equery(DatabaseName, Statement, Params) ->
     equery(DatabaseName, Statement, Params, []).
+
+ -spec parse_execute(DatabaseName :: atom(), Statement :: string(), Params :: list()) ->
+     {ok, Count :: non_neg_integer()}
+     | {ok, Count :: non_neg_integer(), Rows :: any()}
+     | {error, no_connection | no_available_connections}.
+ parse_execute(DatabaseName, Sql, Params) ->
+     transaction(DatabaseName, {parse_execute, Sql,Params}, []).
 
 -spec equery(DatabaseName :: atom(), Statement :: string(), Params :: list(), Options :: [pgpool_query_option()]) ->
     {ok, Count :: non_neg_integer()}
@@ -162,6 +169,18 @@ handle_call({squery, Sql}, _From, #state{conn = Conn} = State) ->
 handle_call({equery, Statement, Params}, _From, #state{conn = Conn} = State) ->
     {_, Name, State1} = prepare_or_get_statement(Statement, State),
     {reply, epgsql:prepared_query(Conn, Name, Params), State1};
+handle_call({parse_execute, Sql, Params}, _From, #state{conn = Conn} = State) ->
+    case epgsql:parse(Conn, Sql,[]) of
+        {ok,S1} ->
+            epgsqla:execute_batch(Conn, S1, Params),
+            receive
+                {_Conn, _Ref, Result} -> Result
+            end,
+            {reply, Result, State};
+        Error ->
+            {reply, Error, State}
+    end;
+
 
 handle_call({batch, StatementsWithParams}, _From, #state{
     conn = Conn
@@ -273,18 +292,7 @@ prepare_or_get_statement(Statement, #state{
     conn = Conn,
     prepared_statements = PreparedStatements
 } = State) ->
-    
-    Name = case dict:find( integer_to_list(erlang:phash2(Statement)), PreparedStatements) of
-        {ok, StoreName} ->
-            StoreName;
-        error ->
-               RandomNum1 = 1 + rand:uniform(10000 - 1 + 1) - 1,
-               RandomNum2 = 10000 + rand:uniform(100000 - 10000 + 1) - 1,
-               RandomNum3 = 100000 + rand:uniform(1000000 - 100000 + 1) - 1,
-               CreatedName = lists:concat([integer_to_list(RandomNum1),"-",integer_to_list(RandomNum2),"-",integer_to_list(RandomNum3)]),
-               CreatedName
-     end,	
-
+    Name = "statement_" ++ integer_to_list(erlang:phash2(Statement)),
     case dict:find(Name, PreparedStatements) of
         {ok, PreparedStatement} ->
             {PreparedStatement, Name, State};
@@ -292,10 +300,9 @@ prepare_or_get_statement(Statement, #state{
             %% prepare statement
             {ok, PreparedStatement} = epgsql:parse(Conn, Name, Statement, []),
             %% store
-	    PreparedStatements1 = dict:store(Name, PreparedStatement, PreparedStatements),
-            PreparedStatements2 = dict:store( integer_to_list(erlang:phash2(Statement)), Name, PreparedStatements1),
+            PreparedStatements1 = dict:store(Name, PreparedStatement, PreparedStatements),
             %% update state
-            State1 = State#state{prepared_statements = PreparedStatements2},
+            State1 = State#state{prepared_statements = PreparedStatements1},
             %% return
             {PreparedStatement, Name, State1}
     end.
